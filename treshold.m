@@ -3,17 +3,16 @@ clear all;
 myrobot = legoev3('usb');
 
 % ----- SETUP VARIABLES
-whiteThreshold = 7;
+whiteThreshold = 5;
 distanceThreshold = 0.1;
-normalSpeed = 25;
-slowSpeed = 10;
-fastSpeed = 40;
 
 myUltrasonicSensor = sonicSensor(myrobot);
 distance = readDistance(myUltrasonicSensor);
 
 ColorSensorRight = colorSensor(myrobot, 3);
 ColorSensorLeft = colorSensor(myrobot, 2);
+reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
+reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
 
 % left is motor A, right is motor B
 global motorLeft; 
@@ -23,8 +22,7 @@ motorRight = motor(myrobot, 'B');
 
 motorLeft.Speed = 25;
 motorRight.Speed = 25;
-start(motorLeft);
-start(motorRight);
+
 
 % ----- PROGRAM START FROM HERE
 
@@ -32,8 +30,6 @@ start(motorRight);
 colorRight = readLightIntensity(ColorSensorRight);
 colorLeft = readLightIntensity(ColorSensorLeft);
 distance = readDistance(myUltrasonicSensor);
-reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
-reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
 
 % LOOP FOR ROBOT BEHAVIOUR
 while( true )
@@ -45,35 +41,27 @@ while( true )
     reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
     reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
     
-    fprintf('colorLeft: %d colorRight: %d distance: %f\n', colorLeft, colorRight, distance);
-
     %print value
-    fprintf('colorLeft: %d colorRight: %d\n', colorLeft, colorRight);
+    fprintf('colorLeft: %d colorRight: %d distance: %f, reflectedRight: %d, reflectedLeft: %d\n', colorLeft, colorRight, distance, reflectedRight, reflectedLeft);
     
-    %IF DISTANCE SENSOR DETECT OBSTACLE
-    if (distance <distanceThreshold)
-        stopMotors(motorLeft, motorRight);
-        break;
+    % IF LEFT SENSOR DETECT BLACK LINE
+    if(colorLeft <whiteThreshold)
+        %turn left
+        fprintf('turn left');
     end
     
     % IF RIGHT SENSOR DETECT BLACK LINE
     if(colorRight <whiteThreshold)
         %turn right
-        turnRight(motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
+        fprintf('turn right');
     end
     
-    % IF LEFT SENSOR DETECT BLACK LINE
-    if(colorLeft <whiteThreshold)
-        %turn left
-        turnLeft(motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
-        
+    %IF DISTANCE SENSOR DETECT OBSTACLE
+    if (distance <0.1)
+        stopMotors(motorLeft, motorRight);
+        break;
     end
-    
-    %SETUP NORMAL SPEED
-    motorLeft.Speed = 25;
-    motorRight.Speed = 25;
-    start(motorLeft);
-    start(motorRight);
+   
 end
 
 stopMotors(motorLeft, motorRight);
@@ -81,23 +69,32 @@ clear all;
 
 % ---- Functions
 
-function [] = turn( direction, motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold, normalSpeed)
-disp('i am turn left');
-   
-    stopMotors(motorLeft, motorRight);
-    motorLeft.Speed= 0;
-    motorRight.Speed= 0;
-    
-    if(direction = 'left')       
-        motorLeft.Speed = - normalSpeed;
-    else 
-        motorRight.Speed = -normalSpeed;
-    end
+function [] = turnLeft( motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
+    disp('i am turn');
+    %backUp( motorLeft, motorRight)
+    stop(motorLeft, 1);
+    stop(motorRight, 1);
+    motorLeft.Speed = -25;
+    %motorRight.Speed = 25;
     start(motorLeft);
+    %start(motorRight);
+    pause( 0.3 );
+    stop(motorLeft, 1);
+    stop(motorRight, 1);
+end
+
+function [] = turnRight( motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
+    disp('i am turn');
+    %backUp( motorLeft, motorRight)
+    stop(motorLeft, 1);
+    stop(motorRight, 1);
+    motorRight.Speed = -25;
+    %motorLeft.Speed = 25;
     start(motorRight);
-    
-    pause( 0.35 );
-    stopMotors(motorLeft, motorRight);
+    %start(motorLeft);
+    pause( 0.3 );
+    stop(motorLeft, 1);
+    stop(motorRight, 1);
 end
 
 function [] = backUp( motorLeft, motorRight)
