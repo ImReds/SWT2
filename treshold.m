@@ -36,24 +36,24 @@ while( true )
     
     % sensor reading
     distance = readDistance(myUltrasonicSensor);    
-    colorRight = readLightIntensity(ColorSensorRight);
-    colorLeft = readLightIntensity(ColorSensorLeft);
+    %colorRight = readLightIntensity(ColorSensorRight);
+    %colorLeft = readLightIntensity(ColorSensorLeft);
     reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
     reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
-    
+    avg = (reflectedLeft + reflectedRight)/2;
     %print value
-    fprintf('colorLeft: %d colorRight: %d distance: %f, reflectedRight: %d, reflectedLeft: %d\n', colorLeft, colorRight, distance, reflectedRight, reflectedLeft);
+    fprintf('colorLeft: %d colorRight: %d distance: %f, reflectedLeft: %d reflectedRight: %d avg:%d\n', colorLeft, colorRight, distance, reflectedLeft, reflectedRight, avg);
     
     % IF LEFT SENSOR DETECT BLACK LINE
     if(colorLeft <whiteThreshold)
         %turn left
-        fprintf('turn left');
+        %fprintf('turn left');
     end
     
     % IF RIGHT SENSOR DETECT BLACK LINE
     if(colorRight <whiteThreshold)
         %turn right
-        fprintf('turn right');
+        %fprintf('turn right');
     end
     
     %IF DISTANCE SENSOR DETECT OBSTACLE
@@ -68,45 +68,6 @@ stopMotors(motorLeft, motorRight);
 clear all;
 
 % ---- Functions
-
-function [] = turnLeft( motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
-    disp('i am turn');
-    %backUp( motorLeft, motorRight)
-    stop(motorLeft, 1);
-    stop(motorRight, 1);
-    motorLeft.Speed = -25;
-    %motorRight.Speed = 25;
-    start(motorLeft);
-    %start(motorRight);
-    pause( 0.3 );
-    stop(motorLeft, 1);
-    stop(motorRight, 1);
-end
-
-function [] = turnRight( motorLeft, motorRight, ColorSensorLeft, ColorSensorRight, whiteThreshold)
-    disp('i am turn');
-    %backUp( motorLeft, motorRight)
-    stop(motorLeft, 1);
-    stop(motorRight, 1);
-    motorRight.Speed = -25;
-    %motorLeft.Speed = 25;
-    start(motorRight);
-    %start(motorLeft);
-    pause( 0.3 );
-    stop(motorLeft, 1);
-    stop(motorRight, 1);
-end
-
-function [] = backUp( motorLeft, motorRight)
-    disp('i am backing');
-    motorLeft.Speed = -25;
-    motorRight.Speed = -25;
-    start(motorLeft);
-    start(motorRight);
-    pause( 0.25 );
-    stop(motorLeft, 1);
-    stop(motorRight, 1);
-end
 
 function [] = stopMotors(motorLeft, motorRight)
     stop(motorLeft, 1);
