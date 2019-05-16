@@ -41,17 +41,21 @@ distance = readDistance(myUltrasonicSensor);
 reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
 reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
 
-%{
-    % START ON BLACK T-MARK: go straight until sensors are both white
-        motorLeft.Speed = normalSpeed;
-        motorLeft.Speed = normalSpeed;
-        start(motorLeft);
-        start(motorRight);
+
+% START ON BLACK T-MARK: go straight until sensors are both white
+    motorLeft.Speed = normalSpeed;
+    motorLeft.Speed = normalSpeed;
+    start(motorLeft);
+    start(motorRight);
+    %{
+    
     while( reflectedRight <=blackThreshold && reflectedLeft <=blackThreshold)
         reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
         reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
     end
-%}
+    %}
+    pause(1);
+
 
 % LOOP FOR ROBOT BEHAVIOUR
 while( true )
@@ -60,20 +64,148 @@ while( true )
     distance = readDistance(myUltrasonicSensor);
     reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
     reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
-    avg = (reflectedLeft + reflectedRight)/2;
     
+    %print values
+    avg = (reflectedLeft + reflectedRight)/2;    
     fprintf('reflectedLeft: %d reflectedRight: %d distance: %f speed: %d avg %d\n', reflectedLeft, reflectedRight, distance, speed, avg);
     
+    % DECIDE TO TURN OR STOP BECAUSE OF OBSTACLE
+    followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed);
+   
+    % SETUP SPEED    
+    oldSpeed = speed;
+    if((reflectedLeft >=nonBlackThreshold) && (reflectedRight >=nonBlackThreshold))
+        speed = getSpeedByColor(reflectedRight, reflectedLeft, normalSpeed, slowSpeed, fastSpeed, oldSpeed);
+    end
+    
+    % DETECT PARKING AREA    
+    if(isReflectivePurple(avg) && colorsAreNear(reflectedRight, reflectedLeft))
+        reachedParkingArea = true;
+        fprintf('detected purple');
+        break; % to go into parking procedure
+    end
+    
+    motorLeft.Speed = speed;
+    motorRight.Speed = speed;
+    start(motorLeft);
+    start(motorRight);
+end
+
+% PARKING PROCEDURE:
+% GO STRAIGHT UNTIL REACH WHITE AGAIN
+while( true) 
+    %navigate();
+    % sensor reading
+    distance = readDistance(myUltrasonicSensor);
+    reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
+    reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
+    avg = (reflectedLeft + reflectedRight)/2;
+    fprintf('reflectedLeft: %d reflectedRight: %d distance: %f speed: %d avg %d\n', reflectedLeft, reflectedRight, distance, speed, avg);
+
+    
+    followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed);
+    motorLeft.Speed = speed;
+    motorRight.Speed = speed;
+    start(motorLeft);
+    start(motorRight);
+    
+    if((reflectedLeft >=nonBlackThreshold && reflectedRight >=nonBlackThreshold))
+        if((isReflectiveWhite(avg) && colorsAreNear(reflectedRight, reflectedLeft)))
+            break;
+        end
+    end
+end
+parkingSlotSelected =  selectFreeParkingSlot(myUltrasonicSensor, motorLeft, motorRight, normalSpeed);
+fprintf('\n parkingSlotSelected: %s\n', parkingSlotSelected );
+park(parkingSlotSelected, motorLeft, motorRight, normalSpeed, reflectedRight, reflectedLeft, myUltrasonicSensor, ColorSensorRight, ColorSensorLeft, blackThreshold, distanceThreshold, nonBlackThreshold);
+
+% STOP AND FINISH
+stopMotors(motorLeft, motorRight);
+clear all;
+
+% ---- Functions
+function parkingSlotSelected = selectFreeParkingSlot(myUltrasonicSensor, motorLeft, motorRight, normalSpeed)
+    turnOnYourSelf('left', motorLeft, motorRight, normalSpeed);
+    %read and save distance value left
+    pause(0.2);
+    distanceParkingLeft = readDistance(myUltrasonicSensor);
+
+    turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);    %back to straight position
+    turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);
+    %read and save distance value right
+    pause(0.2);
+    distanceParkingRight = readDistance(myUltrasonicSensor);
+    turnOnYourSelf('left', motorLeft, motorRight, normalSpeed);
+
+    %select free parking
+    if(distanceParkingRight > distanceParkingLeft)
+        parkingSlotSelected = 'right';
+    else
+        parkingSlotSelected = 'left';
+    end
+end
+
+function [] = park(parkingSlotSelected, motorLeft, motorRight, normalSpeed, reflectedRight, reflectedLeft, myUltrasonicSensor, ColorSensorRight, ColorSensorLeft, blackThreshold, distanceThreshold, nonBlackThreshold)
+    if(strcmp(parkingSlotSelected, 'left'))
+        turnOnYourSelf('left', motorLeft, motorRight, normalSpeed);
+    else
+        turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);
+    end
+    
+    motorLeft.Speed = normalSpeed;
+    motorRight.Speed = normalSpeed;
+    start(motorLeft);
+    start(motorRight);
+    
+    pause( 1 );      %%TO DO DEFINE HOW go straight        
+    while( true ) 
+        % sensor reading
+        distance = readDistance(myUltrasonicSensor);
+        reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
+        reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
+        
+        fprintf('\n reflectedleft: %d reflectedright: %d',reflectedLeft,reflectedRight);
+        %exit condition
+        if( (reflectedRight <nonBlackThreshold )&& (reflectedLeft <nonBlackThreshold) ) 
+            break;
+        end
+        
+        %navigation
+        followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed);
+        motorLeft.Speed = normalSpeed;
+        motorRight.Speed = normalSpeed;
+        start(motorLeft);
+        start(motorRight);
+        
+    end
+    return;
+end
+
+function [] = turnOnYourSelf(direction, motorLeft, motorRight, normalSpeed)
+    stopMotors(motorLeft, motorRight);
+    motorLeft.Speed= 0;
+    motorRight.Speed= 0;
+    
+    if(strcmp(direction, 'left')    )
+        motorLeft.Speed = - normalSpeed;
+        motorRight.Speed = normalSpeed;
+    else
+        motorLeft.Speed = normalSpeed;
+        motorRight.Speed = -normalSpeed;
+    end
+    start(motorLeft);
+    start(motorRight);
+    
+    pause( 0.15 );      %%TO DO DEFINE HOW MUCH TO TURN
+    stopMotors(motorLeft, motorRight);
+end
+
+function [] = followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed)
     %CHECK OBSTACLE
     if (distance <distanceThreshold)
         stopMotors(motorLeft, motorRight);
-        break;  % this is just for testing porposes,  TO DELETE
-        % stay still until obstacle detected
-        %{
-            while(distance <distanceThreshold)
-            distance = readDistance(myUltrasonicSensor);
-         end
-        %}        
+        % continue;
+        return;  % this is just for testing porposes,  TO DELETE       
     end
    
     % IF RIGHT SENSOR DETECT BLACK LINE
@@ -85,36 +217,9 @@ while( true )
     if(reflectedLeft <blackThreshold)
         turn( 'left', motorLeft, motorRight, normalSpeed)
     end
-   
-    % SETUP SPEED    
-    oldSpeed = speed;
-    if((reflectedLeft >=nonBlackThreshold) && (reflectedRight >=nonBlackThreshold))
-        speed = getSpeedByColor(reflectedRight, reflectedLeft, normalSpeed, slowSpeed, fastSpeed, oldSpeed);
-    end
-    %{
-    % DETECT PARKING AREA
-    if(isReflectivePurple(color))
-        reachedParkingArea = true;
-        % maybe also stop and check color  before start parking
-        %break to go into parking procedure
-    end
-    %}
-    motorLeft.Speed = speed;
-    motorRight.Speed = speed;
-    start(motorLeft);
-    start(motorRight);
 end
 
-% parking procedure
-
-
-stopMotors(motorLeft, motorRight);
-clear all;
-
-% ---- Functions
-
 function [] = turn( direction, motorLeft, motorRight, normalSpeed)
-disp('i am turn left');
    
     stopMotors(motorLeft, motorRight);
     motorLeft.Speed= 0;
@@ -137,13 +242,17 @@ function [] = stopMotors(motorLeft, motorRight)
     stop(motorRight, 1);
 end
 
-function speed = getSpeedByColor(reflectedRight, reflectedLeft, normalSpeed, slowSpeed, fastSpeed, oldSpeed)
-    
+function boolean = colorsAreNear(reflectedRight, reflectedLeft)
     delta = reflectedRight - reflectedLeft;
     if(delta <0)
         delta= delta*-1;
     end
-    if(delta > 15)
+    boolean = (delta <= 15);
+end
+
+function speed = getSpeedByColor(reflectedRight, reflectedLeft, normalSpeed, slowSpeed, fastSpeed, oldSpeed)
+
+    if(colorsAreNear(reflectedRight, reflectedLeft) == false)
         speed = oldSpeed;
         return;
     end
@@ -177,7 +286,7 @@ function boolean = isReflectiveRed(color)
 end
 
 function boolean = isReflectivePurple(color)
-    boolean = (color >= 40 && color <= 45);
+    boolean = (color >= 37 && color <= 42);
 end
 
 function boolean = isReflectiveGrey(color)

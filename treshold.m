@@ -3,16 +3,23 @@ clear all;
 myrobot = legoev3('usb');
 
 % ----- SETUP VARIABLES
-whiteThreshold = 5;
+blackThreshold = 15;
+nonBlackThreshold = 27;
 distanceThreshold = 0.1;
+reflectivenessThreshold = 90;   % to distinguis between track and tape patches areas
+
+normalSpeed = 25;
+slowSpeed = 10;
+fastSpeed = 40;
+reachedParkingArea = false;
+oldSpeed = normalSpeed;
+speed = normalSpeed;
 
 myUltrasonicSensor = sonicSensor(myrobot);
 distance = readDistance(myUltrasonicSensor);
 
 ColorSensorRight = colorSensor(myrobot, 3);
 ColorSensorLeft = colorSensor(myrobot, 2);
-reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
-reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
 
 % left is motor A, right is motor B
 global motorLeft; 
@@ -31,6 +38,8 @@ colorRight = readLightIntensity(ColorSensorRight);
 colorLeft = readLightIntensity(ColorSensorLeft);
 distance = readDistance(myUltrasonicSensor);
 
+%parkingSlotSelected =  selectFreeParkingSlot(myUltrasonicSensor, motorLeft, motorRight, normalSpeed);
+
 % LOOP FOR ROBOT BEHAVIOUR
 while( true )
     
@@ -44,18 +53,6 @@ while( true )
     %print value
     fprintf('colorLeft: %d colorRight: %d distance: %f, reflectedLeft: %d reflectedRight: %d avg:%d\n', colorLeft, colorRight, distance, reflectedLeft, reflectedRight, avg);
     
-    % IF LEFT SENSOR DETECT BLACK LINE
-    if(colorLeft <whiteThreshold)
-        %turn left
-        %fprintf('turn left');
-    end
-    
-    % IF RIGHT SENSOR DETECT BLACK LINE
-    if(colorRight <whiteThreshold)
-        %turn right
-        %fprintf('turn right');
-    end
-    
     %IF DISTANCE SENSOR DETECT OBSTACLE
     if (distance <0.1)
         stopMotors(motorLeft, motorRight);
@@ -68,8 +65,171 @@ stopMotors(motorLeft, motorRight);
 clear all;
 
 % ---- Functions
+function parkingSlotSelected = selectFreeParkingSlot(myUltrasonicSensor, motorLeft, motorRight, normalSpeed)
+    turnOnYourSelf('left', motorLeft, motorRight, normalSpeed);
+    %read and save distance value left
+    pause(0.2);
+    distanceParkingLeft = readDistance(myUltrasonicSensor);
+    fprintf('\n distanceParkingLeft: %d\n', distanceParkingLeft);
+
+    turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);    %back to straight position
+    turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);
+    %read and save distance value right
+    pause(0.2);
+    distanceParkingRight = readDistance(myUltrasonicSensor);
+    fprintf('\n distanceParkingRight: %d\n', distanceParkingRight);
+
+    %select free parking
+    if(distanceParkingRight > distanceParkingLeft)
+        parkingSlotSelected = 'right';
+    else
+        parkingSlotSelected = 'left';
+    end
+end
+
+function [] = park(parkingSlotSelected, motorLeft, motorRight, normalSpeed, reflectedRight, reflectedLeft, myUltrasonicSensor, ColorSensorRight, ColorSensorLeft, blackThreshold, distanceThreshold)
+    if(strcmp(parkingSlotSelected, 'left'))
+        turnOnYourSelf('left', motorLeft, motorRight, normalSpeed);
+    else
+        turnOnYourSelf('right', motorLeft, motorRight, normalSpeed);
+    end
+    
+    motorLeft.Speed = normalSpeed;
+    motorRight.Speed = normalSpeed;
+    start(motorLeft);
+    start(motorRight);
+    
+    pause( 2 );      %%TO DO DEFINE HOW go straight
+    
+    distance = readDistance(myUltrasonicSensor);
+    reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
+    reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
+        
+    while( true ) 
+        %navigate();
+        % sensor reading
+        distance = readDistance(myUltrasonicSensor);
+        reflectedRight =  readLightIntensity(ColorSensorRight, 'reflected');
+        reflectedLeft =  readLightIntensity(ColorSensorLeft, 'reflected');
+        
+        if( (reflectedRight <blackThreshold )&& (reflectedLeft <blackThreshold) ) %exit condition
+            break;
+        end
+        
+        followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed);
+    end
+    return;
+end
+    
+
+function [] = turnOnYourSelf(direction, motorLeft, motorRight, normalSpeed)
+    stopMotors(motorLeft, motorRight);
+    motorLeft.Speed= 0;
+    motorRight.Speed= 0;
+    
+    if(strcmp(direction, 'left')    )
+        motorLeft.Speed = - normalSpeed;
+        motorRight.Speed = normalSpeed;
+    else
+        motorLeft.Speed = normalSpeed;
+        motorRight.Speed = -normalSpeed;
+    end
+    start(motorLeft);
+    start(motorRight);
+    
+    pause( 0.20 );      %%TO DO DEFINE HOW MUCH TO TURN
+    stopMotors(motorLeft, motorRight);
+end
+
+function [] = followLineAndAvoidCollision(reflectedLeft, reflectedRight, blackThreshold, distance, distanceThreshold, motorLeft, motorRight, normalSpeed)
+    %CHECK OBSTACLE
+    if (distance <distanceThreshold)
+        stopMotors(motorLeft, motorRight);
+        % continue;
+        return;  % this is just for testing porposes,  TO DELETE       
+    end
+   
+    % IF RIGHT SENSOR DETECT BLACK LINE
+    if(reflectedRight <blackThreshold)
+        turn( 'right', motorLeft, motorRight, normalSpeed)
+    end
+
+    % IF LEFT SENSOR DETECT BLACK LINE
+    if(reflectedLeft <blackThreshold)
+        turn( 'left', motorLeft, motorRight, normalSpeed)
+    end
+end
+
+function [] = turn( direction, motorLeft, motorRight, normalSpeed)
+   
+    stopMotors(motorLeft, motorRight);
+    motorLeft.Speed= 0;
+    motorRight.Speed= 0;
+    
+    if(strcmp(direction, 'left')    )
+        motorLeft.Speed = - normalSpeed;
+    else 
+        motorRight.Speed = -normalSpeed;
+    end
+    start(motorLeft);
+    start(motorRight);
+    
+    pause( 0.45 );
+    stopMotors(motorLeft, motorRight);
+end
 
 function [] = stopMotors(motorLeft, motorRight)
     stop(motorLeft, 1);
     stop(motorRight, 1);
+end
+
+function boolean = colorsAreNear(reflectedRight, reflectedLeft)
+    delta = reflectedRight - reflectedLeft;
+    if(delta <0)
+        delta= delta*-1;
+    end
+    boolean = (delta <= 15);
+end
+
+function speed = getSpeedByColor(reflectedRight, reflectedLeft, normalSpeed, slowSpeed, fastSpeed, oldSpeed)
+
+    if(colorsAreNear(reflectedRight, reflectedLeft) == false)
+        speed = oldSpeed;
+        return;
+    end
+    
+    color = (reflectedRight + reflectedLeft)/2;
+    
+    if(isReflectiveWhite(color))
+        speed = normalSpeed;
+        return;
+    end
+    
+    if(isReflectiveRed(color))
+        speed = fastSpeed;
+        return;
+    end
+    
+    if(isReflectiveGrey(color))
+        speed = slowSpeed;
+        return;
+    end
+    
+    speed = oldSpeed;
+end
+
+function boolean = isReflectiveWhite(color)
+    boolean = (color >= 80);
+end
+
+function boolean = isReflectiveRed(color)
+    boolean = (color >= 65 && color <= 75);
+end
+
+function boolean = isReflectivePurple(color)
+    boolean = (color >= 36 && color <= 42);
+end
+
+function boolean = isReflectiveGrey(color)
+    boolean = (color >= 20 && color <= 34);
 end
